@@ -71,7 +71,8 @@ try {
       ranked.slice(0,7).map(r=>[r.word,data.stores[r.store].name,pts(r.delta[0]),pts(r.delta[1]),r.gain])));
     const stock = stockWatch(data,dayRows);
     $("stock").replaceChildren(el("p",stock.out.length+" out of stock across "+stock.observed+" observed product-store pairs · "+stock.conflicts+" conflicting"),
-      table(["Product","Store"],stock.out.slice(0,10)));
+      table(["Product","Store","Date"],stock.out.slice(0,10)),
+      el("small",stock.out.length > 10 ? "Showing 10 of " + stock.out.length + " observations." : ""));
     const stores = new Set(dayRows.map(x=>x[1]));
     const keywords = new Set(dayRows.map(x=>x[2]));
     const gaps = data.gaps.filter(g=>g[0]===f.day && stores.has(g[1]) && keywords.has(g[2]));
