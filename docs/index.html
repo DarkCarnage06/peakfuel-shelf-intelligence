@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Peakfuel | Shelf Intelligence</title><link rel="stylesheet" href="style.css"><script type="module" src="main.js"></script></head>
+<body><header><div class="brand">Peakfuel <span>/ Shelf Intelligence</span></div><span class="source">QuickShelf · Synthetic data</span></header>
+<main><div class="intro"><div><h1>Search visibility</h1><p>See where Peakfuel earns space, pays for it, and loses availability.</p></div><div id="filters"><label>Through <select id="day"></select></label><label>Market <select id="market"></select></label><label>Keyword <select id="word"></select></label></div></div>
+<div id="status" role="status">Loading crawl snapshot…</div>
+<div class="layout"><div>
+<section><h2>First-screen share</h2><p>Search-volume weighted · Positions 1–8 · Organic and sponsored shares of all measured slots</p><div id="metrics" class="metrics"></div><div id="chart"></div></section>
+<section><h2>Where visibility changed</h2><p>Compared with the previous day across the same measured store and keyword pairs.</p><div id="changes"></div></section>
+<section><h2>Stock watch</h2><p>Peakfuel product-store observations across retrieved pages. Missing observations remain unknown.</p><div id="stock"></div></section></div>
+<aside><section class="ask"><h2>Ask Shelf Intelligence</h2><p>Ask about visibility, coverage, competitors, or stock in the selected scope.</p>
+<div class="prompts"><button type="button">How did we do on protein bar this week?</button><button type="button">What is out of stock?</button><button type="button">Who gained organic visibility?</button></div>
+<form><label for="question">Your question</label><textarea maxlength="500" id="question" required></textarea><button class="primary">Ask</button></form><div id="answer" role="status"></div></section>
+<section><h2>Data coverage</h2><div id="coverage"></div></section></aside></div></main></body></html>
