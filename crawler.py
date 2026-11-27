@@ -1,11 +1,13 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor
-from itertools import product
+from itertools import combinations, product
 from datetime import date, timedelta
 import json
+import math
 from pathlib import Path
 import sqlite3
 import threading
+import tempfile
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -31,7 +33,8 @@ def connect(path):
 
 
 def validate(doc, day, store, keyword, page, total):
-    if tuple(doc.get(k) for k in ("day", "store_id", "keyword", "page")) != (day, store, keyword, page):
+    if type(doc.get("page")) is not int or tuple(doc.get(k) for k in
+            ("day", "store_id", "keyword", "page")) != (day, store, keyword, page):
         raise ValueError("response identity mismatch")
     n = doc.get("total")
     if type(n) is not int or not 0 <= n <= 24 or (total is not None and total != n):
@@ -40,7 +43,8 @@ def validate(doc, day, store, keyword, page, total):
     rows = doc["results"]
     if doc.get("has_next") is not (page * 8 < n):
         raise ValueError("inconsistent pagination")
-    if [r["position"] for r in rows] != list(range(start + 1, min(start + 8, n) + 1)):
+    expected = list(range(start + 1, min(start + 8, n) + 1))
+    if any(type(r["position"]) is not int for r in rows) or [r["position"] for r in rows] != expected:
         raise ValueError("incomplete or unordered positions")
     ids = set()
     for row in rows:
@@ -48,7 +52,7 @@ def validate(doc, day, store, keyword, page, total):
             raise ValueError("missing product identity")
         if row["product_id"] in ids or any(type(row[k]) is not bool for k in ("in_stock", "sponsored")):
             raise ValueError("duplicate product or invalid flags")
-        if not all(type(row[k]) in (int, float) and row[k] >= 0 for k in ("price", "mrp")):
+        if not all(type(row[k]) in (int, float) and math.isfinite(row[k]) and row[k] >= 0 for k in ("price", "mrp")):
             raise ValueError("invalid price")
         ids.add(row["product_id"])
     return doc
@@ -142,6 +146,22 @@ def crawl(path, url):
         db.close()
 
 
+def detect_aliases(stores, signatures):
+    """Require both collocated metadata and repeated identical nonempty pages."""
+    aliases = {}
+    for first, second in combinations(sorted(stores), 2):
+        if first in aliases or second in aliases:
+            continue
+        if any(stores[first][field] != stores[second][field] for field in ("lat", "lng", "city")):
+            continue
+        a, b = signatures.get(first, {}), signatures.get(second, {})
+        overlap = a.keys() & b.keys()
+        nonempty = sum(bool(a[key]) for key in overlap)
+        if nonempty >= 12 and all(a[key] == b[key] for key in overlap):
+            aliases[second] = {"canonical": first, "matched_nonempty": nonempty}
+    return aliases
+
+
 def snapshot(path):
     db = connect(path)
     with db:
@@ -151,11 +171,14 @@ def snapshot(path):
         words = {k["keyword"]: k["monthly_searches"] for k in meta["keywords"]}
         jobs = {key: {"seen": set(), "total": None, "top": {}, "stock": {}}
                 for key in product(DAYS, stores, words)}
+        signatures = {}
         for day, store, word, page, data in db.execute("SELECT * FROM pages ORDER BY page"):
             doc = json.loads(data)
             job = jobs[(day, store, word)]
             job["seen"].add(page)
             job["total"] = doc["total"]
+            if page == 1:
+                signatures.setdefault(store, {})[day, word] = doc["results"]
             for r in doc["results"]:
                 if page == 1:
                     count = job["top"].setdefault(r["brand"], [0, 0, 0, 0])
@@ -165,13 +188,19 @@ def snapshot(path):
                     job["stock"][r["product_id"]] = [r["title"], r["in_stock"]]
         gaps = [list(row) for row in db.execute("SELECT * FROM gaps ORDER BY day, store, keyword, page")]
     db.close()
+    aliases = detect_aliases(stores, signatures)
     rows = []
     for (day, store, word), job in jobs.items():
+        if store in aliases:
+            continue
         total = job["total"]
         full = total is not None and len(job["seen"]) == max(1, (total + 7) // 8)
         rows.append([day, store, word, min(8, total) if 1 in job["seen"] else None,
                      job["top"], full, job["stock"]])
-    return dict(stores=stores, words=words, days=DAYS, rows=rows, gaps=gaps)
+    return dict(stores={key: value for key, value in stores.items() if key not in aliases},
+                aliases={key: {**value, "name": stores[key]["name"]} for key, value in aliases.items()},
+                words=words, days=DAYS, rows=rows, gaps=gaps)
+
 
 
 if __name__ == "__main__":
@@ -183,6 +212,10 @@ if __name__ == "__main__":
     if args.command == "crawl":
         crawl(args.db, args.url)
     else:
-        Path("docs/snapshot.json").write_text(json.dumps(snapshot(args.db), separators=(",", ":")), encoding="utf-8")
+        target = Path("docs/snapshot.json")
+        with tempfile.NamedTemporaryFile(mode="w", dir=target.parent, encoding="utf-8", delete=False) as file:
+            temporary = Path(file.name)
+            json.dump(snapshot(args.db), file, separators=(",", ":"))
+        temporary.replace(target)
 
 

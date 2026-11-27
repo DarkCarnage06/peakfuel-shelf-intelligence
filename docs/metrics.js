@@ -7,6 +7,7 @@ export function scope(data, filters, days) {
 export function summarize(data, rows, brand="Peakfuel") {
   let denominator=0, first=0, full=0, empty=0;
   const numerator=[0,0];
+  const inStock=[0,0];
   for (const [, ,word,slots,top,complete] of rows) {
     full+=Number(complete);
     if (slots===null) continue;
@@ -14,11 +15,13 @@ export function summarize(data, rows, brand="Peakfuel") {
     empty+=Number(slots===0);
     const weight=data.words[word];
     denominator+=weight*slots;
-    const counts=top[brand] || [0,0];
+    const counts=top[brand] || [0,0,0,0];
     numerator[0]+=weight*counts[0];
     numerator[1]+=weight*counts[1];
+    inStock[0]+=weight*(counts[2] ?? 0);
+    inStock[1]+=weight*(counts[3] ?? 0);
   }
-  return {share:numerator.map(n=>denominator?n/denominator:null), planned:rows.length, first, full, empty};
+  return {share:numerator.map(n=>denominator?n/denominator:null), inStockShare:inStock.map(n=>denominator?n/denominator:null), planned:rows.length, first, full, empty};
 }
 
 export function compare(data, rows, previous, brand="Peakfuel") {
@@ -59,6 +62,7 @@ export function stockWatch(data, rows) {
 
 export function planLocal(data, question, f) {
   const q=question.toLowerCase();
+  const brand=brands.find(name=>q.includes(name.toLowerCase()));
   const words=Object.keys(data.words);
   const markets=[...new Set(Object.values(data.stores).flatMap(s=>[s.city,s.name,s.store_id]))];
   const market=markets.sort((a,b)=>b.length-a.length).find(n=>(" "+q.replace(/[^a-z0-9 ]/g," ")+" ").includes(" "+n.toLowerCase()+" ")) ?? (q.includes("bangalore")?"Bengaluru":f.market);
@@ -73,10 +77,10 @@ export function planLocal(data, question, f) {
   else if (/visibility|share|how did|perform|organic|sponsored|ranking|first screen/.test(q)) intent="visibility";
   const requested=q.match(/\b(?:on|for) ([a-z ]+)\b/)?.[1]?.trim();
   if (requested && !words.some(w=>requested.includes(w)) &&
-      !markets.some(m=>requested.includes(m.toLowerCase())) &&
+      !markets.some(m=>(" "+requested+" ").includes(" "+m.toLowerCase()+" ")) &&
       !/^(peakfuel|us|all |the |this |last |both )/.test(requested) &&
       !/^(coverage|today|yesterday|organic|sponsored|paid|stock)/.test(requested)) intent="unsupported";
-  return {intent,market,word,end,window};
+  return {intent,market,word,end,window,brand};
 }
 
 export function answer(data, plan, filters) {
@@ -95,6 +99,7 @@ export function answer(data, plan, filters) {
   const pct=n=>n===null?"unavailable":(100*n).toFixed(1)+"%";
   if (plan.intent==="coverage") return source+" "+s.empty+" measured searches were verified empty.";
   if (plan.intent==="stock") {
+    if (plan.brand) return "Stock watch covers Peakfuel observations. "+source;
     const stock=stockWatch(data,rows);
     return stock.out.length+" out-of-stock product/store/day observations from "+stock.observed+
       " observed. "+stock.conflicts+" conflicting observations.\n"+
@@ -103,6 +108,11 @@ export function answer(data, plan, filters) {
   const anchor=days.at(-1), prior=data.days[start-1], a=scope(data,f,[anchor]), b=scope(data,f,prior?[prior]:[]);
   const pp=n=>n===null?"unavailable":(n>=0?"+":"")+(100*n).toFixed(1)+" pp";
   if (plan.intent==="competitors") {
+    if (brands.includes(plan.brand)) {
+      const share = summarize(data, rows, plan.brand).share;
+      return plan.brand+" held "+pct(share[0])+" organic and "+pct(share[1])+
+        " sponsored first-screen share.\n"+source;
+    }
     const changes=brands.map(brand=>[brand,compare(data,a,b,brand)]).filter(row=>row[1].delta[0]!==null)
       .sort((x,y)=>y[1].delta[0]-x[1].delta[0]);
     const leader=changes.find(row=>row[1].delta[0]>0);
@@ -111,6 +121,7 @@ export function answer(data, plan, filters) {
   }
   if(plan.intent==="visibility") {
     const c=compare(data,a,b);
+    if (s.share[0]===null) return "First-screen share is unavailable for this scope. "+source;
     return "Peakfuel held "+pct(s.share[0])+" organic and "+pct(s.share[1])+
       " sponsored first-screen share. "+(prior&&c.matched?"Organic "+pp(c.delta[0])+", sponsored "+pp(c.delta[1])+
       " from "+prior+" to "+anchor+" on "+c.matched+" matched searches. ":"")+source;

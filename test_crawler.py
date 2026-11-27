@@ -1,5 +1,5 @@
 import unittest
-from crawler import validate
+from crawler import detect_aliases, validate
 
 
 class PageValidation(unittest.TestCase):
@@ -30,3 +30,15 @@ class PageValidation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pagination"):
             self.validate(has_next=True)
 
+
+
+class AliasDetection(unittest.TestCase):
+    def test_evidence_requires_location_repeatability_and_no_disagreement(self):
+        locations = dict(city="Bengaluru", lat=12.9, lng=77.6)
+        stores = {"S01": locations, "S02": locations, "S03": locations | {"lat": 12.8}}
+        pages = {("2026-11-14", str(i)): [{"product_id": str(i)}] for i in range(12)}
+        signatures = {"S01": pages, "S02": pages.copy(), "S03": pages}
+        self.assertEqual(detect_aliases(stores, signatures),
+                         {"S02": {"canonical": "S01", "matched_nonempty": 12}})
+        signatures["S02"]["2026-11-14", "0"] = []
+        self.assertEqual(detect_aliases(stores, signatures), {})

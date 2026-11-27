@@ -12,5 +12,9 @@ Assistant
 >
 > Zepto’s search endpoint returned an AWS WAF challenge with no product data. I’ll leave the live CSV unfilled and document the response. The QuickShelf crawl is running against Jai’s mock server, with validated pages saved as it goes.
 
+> I stopped the crawler after it had saved 2,861 pages. SQLite passed its integrity check, and the restarted crawl reused those pages. I’ve pushed the code to GitHub and will verify the Pages deployment once the full crawl snapshot is ready.
+>
+> The crawl found two store records with identical coordinates and matching results across many searches. The dashboard now shows that evidence and counts the pair once in rollups, while the crawler preserves both raw records. The validation and answer tests are passing.
+
 This excerpt contains the project-facing messages sent during implementation. Tool output containing account information and private file links is excluded. The implementation was drafted by Codex. Decision notes, verification commands, and known gaps are in the README and PART1.md.
 

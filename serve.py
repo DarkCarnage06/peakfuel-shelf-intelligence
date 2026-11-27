@@ -20,10 +20,12 @@ def plan(question, key):
                   "word": {"type": ["string", "null"], "enum": [None, "All keywords", *data["words"]]},
                   "market": {"type": ["string", "null"], "enum": [None, "All markets", *markets]},
                   "end": {"type": ["string", "null"], "enum": [None, *data["days"]]},
+                  "brand": {"type": ["string", "null"], "enum": [None, "Brawn", "Nutrova", "Grainly", "Cocobloom", "FitFolk"]},
                   "window": {"type": ["integer", "null"], "enum": [None, 1, 7, 14]},
-              }, "required": ["intent", "word", "market", "end", "window"]}
+              }, "required": ["intent", "word", "market", "end", "window", "brand"]}
     payload = {
         "model": os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"),
+        "store": False,
         "instructions": (
             "Classify a QuickShelf brand analytics question as a read-only query. "
             "Set scope fields to null unless explicitly requested. Let the local parser handle relative dates. "
@@ -48,6 +50,9 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path != "/api/plan":
             self.send_error(404)
+            return
+        if self.headers.get_content_type() != "application/json":
+            self.send_error(415, "Expected application/json")
             return
         key = os.getenv("OPENAI_API_KEY")
         if not key:
